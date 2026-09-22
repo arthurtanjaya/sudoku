@@ -635,16 +635,7 @@ func (n *humanSolveSearcher) Search() {
 	//a cell of rank 3 will be equally bad, making it more important to only
 	//return cells of the lowest rank.
 
-	//TODO: make this configurable
-
-	//TODO: test if this is faster on devices with other numbers of cores or
-	//if it's just tuned to the Mac Pro.
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	numFindThreads := runtime.GOMAXPROCS(0)/2 - 1
-
-	if numFindThreads < 2 {
-		numFindThreads = 2
-	}
+	numFindThreads := min(2, runtime.GOMAXPROCS(0)/2-1)
 
 	workItems := make(chan *humanSolveWorkItem)
 
