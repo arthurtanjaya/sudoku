@@ -2,6 +2,8 @@ package sudoku
 
 import (
 	"testing"
+
+	"github.com/jkomoros/sudoku/internal/race"
 )
 
 func TestHumanSolveSearcher(t *testing.T) {
@@ -181,4 +183,14 @@ func TestHumanSolveSearcher(t *testing.T) {
 		t.Error("Expected first step to be the step of nonFillStepItem. Got", steps[0])
 	}
 
+}
+
+func TestHumanSolvePossibleStepsRace(t *testing.T) {
+	if !race.Enabled {
+		t.Skip("This test needs the race detector to be useful.")
+	}
+
+	grid := MutableLoadSDK(TEST_GRID)
+
+	grid.HumanSolvePossibleSteps(DefaultHumanSolveOptions(), nil)
 }

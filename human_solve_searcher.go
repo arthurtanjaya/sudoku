@@ -97,7 +97,7 @@ type humanSolveSearcher struct {
 	//itemsLock controls access to itemsToExplore, completedItems,
 	//straightforwardItemsCount, etc.
 	//TODO: consider having more fine-grained locks for performance.
-	itemsLock sync.Mutex
+	itemsLock sync.RWMutex
 
 	//Various options frozen in at creation time that various methods need
 	//access to.
@@ -489,6 +489,12 @@ func newHumanSolveSearcher(grid Grid, previousCompoundSteps []*CompoundSolveStep
 		heapIndex: -1,
 	}
 	heap.Push(&searcher.itemsToExplore, initialItem)
+
+	// [HumanSolveOptions.effectiveTechniquesToUse] might modify
+	// an internal cache on the first call. To be safe, we call
+	// this here so future accesses do not need a lock.
+	searcher.options.effectiveTechniquesToUse()
+
 	return searcher
 }
 
@@ -499,7 +505,9 @@ func (n *humanSolveSearcher) AddItem(item *humanSolveItem) {
 		return
 	}
 	item.added = true
+
 	n.itemsLock.Lock()
+	defer n.itemsLock.Unlock()
 
 	if item.IsComplete() {
 		n.completedItems = append(n.completedItems, item)
@@ -509,29 +517,30 @@ func (n *humanSolveSearcher) AddItem(item *humanSolveItem) {
 	} else {
 		heap.Push(&n.itemsToExplore, item)
 	}
-	n.itemsLock.Unlock()
 }
 
 func (n *humanSolveSearcher) ItemValueChanged(item *humanSolveItem) {
 	if item.heapIndex < 0 {
 		return
 	}
+
 	n.itemsLock.Lock()
+	defer n.itemsLock.Unlock()
+
 	heap.Fix(&n.itemsToExplore, item.heapIndex)
-	n.itemsLock.Unlock()
 }
 
 //DoneSearching will return true when no more items need to be explored
 //because we have enough CompletedItems.
 func (n *humanSolveSearcher) DoneSearching() bool {
 	if n.options == nil {
-		close(n.done)
+		n.signalDone()
 		return true
 	}
 
-	n.itemsLock.Lock()
+	n.itemsLock.RLock()
 	lenCompletedItems := len(n.completedItems)
-	n.itemsLock.Unlock()
+	n.itemsLock.RUnlock()
 
 	result := n.options.NumOptionsToCalculate <= lenCompletedItems
 	if result {
@@ -542,22 +551,24 @@ func (n *humanSolveSearcher) DoneSearching() bool {
 
 func (n *humanSolveSearcher) signalDone() {
 	n.itemsLock.Lock()
+	defer n.itemsLock.Unlock()
+
 	if !n.channelClosed {
 		close(n.done)
 		n.channelClosed = true
 	}
-	n.itemsLock.Unlock()
 }
 
 //NextPossibleStep pops the best step and returns it.
 func (n *humanSolveSearcher) NextPossibleStep() *humanSolveItem {
+	n.itemsLock.Lock()
+	defer n.itemsLock.Unlock()
+
 	if n.itemsToExplore.Len() == 0 {
 		return nil
 	}
 
-	n.itemsLock.Lock()
 	result := heap.Pop(&n.itemsToExplore).(*humanSolveItem)
-	n.itemsLock.Unlock()
 
 	return result
 }
@@ -718,6 +729,9 @@ func humanSolveSearcherWorkItemGenerator(searcher *humanSolveSearcher, workItems
 
 //String prints out a useful debug output for the searcher's state.
 func (n *humanSolveSearcher) String() string {
+	n.itemsLock.RLock()
+	defer n.itemsLock.RUnlock()
+
 	result := "Items:" + strconv.Itoa(len(n.itemsToExplore)) + "\n"
 	result += "Completed:" + strconv.Itoa(len(n.completedItems)) + "\n"
 	result += "[\n"
@@ -783,13 +797,15 @@ func humanSolvePossibleStepsImpl(grid Grid, options *HumanSolveOptions, previous
 
 	//Prepare the distribution and list of steps
 
+	//Get a consistent snapshot of completedItems; its length might change.
+	searcher.itemsLock.RLock()
+	completedItems := searcher.completedItems
+	searcher.itemsLock.RUnlock()
+
 	//But first check if we don't have any.
-	if len(searcher.completedItems) == 0 {
+	if len(completedItems) == 0 {
 		return nil, nil
 	}
-
-	//Get a consistent snapshot of completedItems; its length might change.
-	completedItems := searcher.completedItems
 
 	distri := make(ProbabilityDistribution, len(completedItems))
 	var resultSteps []*CompoundSolveStep
