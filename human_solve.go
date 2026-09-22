@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -491,10 +490,13 @@ func calcluateGridDifficulty(grid Grid, accurate bool) float64 {
 	average := 0.0
 	lastAverage := 0.0
 
-	//TODO: ... this is a no-op, right? Why is it here? Presumably so that
-	//when every copy called HasMultipleSolutions at the top of HumanSolution
-	//it would already be cached?
-	grid.HasMultipleSolutions()
+	if grid.Solved() || !grid.HasSolution() || grid.HasMultipleSolutions() {
+		// [gridDifficultyHelper] eventually calls [humanSolveHelper], which
+		// refuses to solve puzzles that are solved or have multiple solutions.
+		// An unsolvable grid also has no meaningful difficulty.
+		// So we might as well return early here.
+		return 0.0
+	}
 
 	//Since this is so expensive, in testing situations we want to run it in less accurate mode (so it goes fast!)
 	maxIterations := _MAX_DIFFICULTY_ITERATIONS
@@ -523,6 +525,7 @@ func calcluateGridDifficulty(grid Grid, accurate bool) float64 {
 //This function will HumanSolve _NUM_SOLVES_FOR_DIFFICULTY times, then average the signals together, then
 //give the difficulty for THAT. This is more accurate becuase the weights were trained on such averaged signals.
 func gridDifficultyHelper(grid Grid) float64 {
+	// Assumes grid is not already solved and has exactly one solution.
 
 	collector := make(chan DifficultySignals, _NUM_SOLVES_FOR_DIFFICULTY)
 	//Might as well run all of the human solutions in parallel
@@ -530,8 +533,8 @@ func gridDifficultyHelper(grid Grid) float64 {
 		go func(gridToUse Grid) {
 			solution := gridToUse.HumanSolution(nil)
 			if solution == nil {
-				log.Println("A generated grid turned out to have mutiple solutions (or otherwise return nil), indicating a very serious error:", gridToUse.DataString())
-				os.Exit(1)
+				log.Println("Grid.HumanSolution was unable to solve this grid, indicating a very serious error:", gridToUse.DataString())
+				return
 			}
 			collector <- solution.Signals()
 		}(grid)

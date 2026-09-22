@@ -636,3 +636,37 @@ func puzzleDifficultyHelper(filename string, t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestDifficultyEdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  float64
+	}{
+		{
+			name:  "solved_grid",
+			input: SOLVED_TEST_GRID,
+			want:  0.0,
+		},
+		{
+			name:  "multiple_solutions",
+			input: strings.Repeat(".", DIM*DIM),
+			want:  0.0,
+		},
+		{
+			name:  "no_solutions",
+			input: strings.Repeat("1", DIM*DIM),
+			want:  0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			grid := LoadSDK(tt.input)
+			difficulty := grid.Difficulty()
+			if difficulty != tt.want {
+				t.Errorf("Difficulty() = %v, want %v", difficulty, tt.want)
+			}
+		})
+	}
+}
