@@ -533,11 +533,6 @@ func (n *humanSolveSearcher) ItemValueChanged(item *humanSolveItem) {
 //DoneSearching will return true when no more items need to be explored
 //because we have enough CompletedItems.
 func (n *humanSolveSearcher) DoneSearching() bool {
-	if n.options == nil {
-		n.signalDone()
-		return true
-	}
-
 	n.itemsLock.RLock()
 	lenCompletedItems := len(n.completedItems)
 	n.itemsLock.RUnlock()
@@ -650,23 +645,7 @@ func (n *humanSolveSearcher) Search() {
 		go humanSolveSearcherFindThread(workItems, &solveThreadsDone)
 	}
 
-	allSolveThreadsDone := make(chan bool)
-
-	//Convert the wait group into a channel send for convenience of using
-	//select{} below.
-	go func() {
-		solveThreadsDone.Wait()
-		allSolveThreadsDone <- true
-	}()
-
-	//Wait for either all solve threads to have finished (meaning they have
-	//found everything they're going to find) or for ourselves to have
-	//signaled that we reached DoneSearching().
-	select {
-	case <-allSolveThreadsDone:
-	case <-n.done:
-	}
-
+	solveThreadsDone.Wait()
 }
 
 //humanSolveSearcherFindThread is a thread that takes in workItems and runs
