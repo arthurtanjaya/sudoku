@@ -630,7 +630,7 @@ func (n *humanSolveSearcher) Search() {
 	//a cell of rank 3 will be equally bad, making it more important to only
 	//return cells of the lowest rank.
 
-	numFindThreads := max(2, runtime.GOMAXPROCS(0)/2-1)
+	numFindThreads := max(1, runtime.GOMAXPROCS(0)/2)
 
 	workItems := make(chan *humanSolveWorkItem)
 
